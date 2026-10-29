@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Minecraft Panorama 全景查看器</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #000;
+    user-select: none;
+  }
+  #viewer {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    cursor: none;
+  }
+  /* 屏幕正中央的 FPS 准星（仅在锁定模式下显示） */
+  #crosshair {
+    position: fixed;
+    left: 50%; top: 50%;
+    width: 22px; height: 22px;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 10;
+    display: none;
+  }
+  #crosshair::before, #crosshair::after {
+    content: '';
+    position: absolute;
+    background: rgba(255,255,255,.85);
+  }
+  #crosshair::before { left: 50%; top: 0; width: 2px; height: 100%; transform: translateX(-50%); }
+  #crosshair::after  { top: 50%; left: 0; height: 2px; width: 100%; transform: translateY(-50%); }
+  #crosshair i {
+    position: absolute;
+    left: 50%; top: 50%;
+    width: 4px; height: 4px;
+    transform: translate(-50%, -50%);
+    background: rgba(255,255,255,.85);
+    border-radius: 50%;
+  }
+  /* FPS 锁定中：隐藏光标 + 显示中央准星 */
+  body.fps #viewer { cursor: none; }
+  body.fps #crosshair { display: block; }
+  /* 操作提示条 */
+  #hint {
+    position: fixed;
+    left: 50%; bottom: 24px;
+    transform: translateX(-50%);
+    color: rgba(207,211,220,.75);
+    font-family: "Segoe UI", system-ui, sans-serif;
+    font-size: 13px;
+    background: rgba(0,0,0,.45);
+    padding: 6px 14px;
+    border-radius: 6px;
+    pointer-events: none;
+    z-index: 20;
+    white-space: nowrap;
+  }
+  canvas { display: block; width: 100%; height: 100%; }
+  #loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #cfd3dc;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    font-size: 14px;
+    background: #000;
+    pointer-events: none;
+    transition: opacity .3s ease;
+  }
+  #loading.hidden { opacity: 0; }
+</style>
+</head>
+<body>
+<div id="viewer"><canvas id="gl"></canvas><div id="loading">加载全景图 ...</div></div>
+<div id="crosshair"><i></i></div>
+<div id="hint">点击进入 FPS 模式</div>
+<script>
+(() => {
+  const canvas = document.getElementById('gl');
+  const gl = canvas.getContext('webgl', { antialias: true });
+  if (!gl) { document.body.textContent = 'WebGL 不支持'; return; }
+
+  // ============================================================
+  // 模板说明：
+  // 把 6 张全景图放到本 HTML 同目录，按数字命名：
+  //   1.jpg/1.png → 东(+X)   2.jpg/2.png → 西(-X)
+  //   3.jpg/3.png → 上(+Y)   4.jpg/4.png → 下(-Y)
+  //   5.jpg/5.png → 南(+Z)   6.jpg/6.png → 北(-Z)
+  // 也兼容 panorama_N.png / pano_N.png 等命名。
+  // 调哪个方向是哪张图 = 直接改文件名（编号进哪个位置）。
+  // 扔进文件夹就能用，无需改代码。
+  // ============================================================
+  // WebGL cubemap 顺序: [posX, negX, posY, negY, posZ, negZ]
+  const facePatterns = [
+    ['1.webp','1.jpg','1.png','panorama_0.png','pano_0.png'],   // 东 posX
+    ['2.webp','2.jpg','2.png','panorama_1.png','pano_1.png'],   // 西 negX
+    ['3.webp','3.jpg','3.png','panorama_4.png','pano_4.png'],   // 上 posY
+    ['4.webp','4.jpg','4.png','panorama_5.png','pano_5.png'],   // 下 negY
+    ['5.webp','5.jpg','5.png','panorama_2.png','pano_2.png'],   // 南 posZ
+    ['6.webp','6.jpg','6.png','panorama_3.png','pano_3.png'],   // 北 negZ
+  ];
+
+  const cubemap = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_CUBE_MAP, cubemap);
+  const targets = [
+    gl.TEXTURE_CUBE_MAP_POSITIVE_X,
+    gl.TEXTURE_CUBE_MAP_NEGATIVE_X,
+    gl.TEXTURE_CUBE_MAP_POSITIVE_Y,
+    gl.TEXTURE_CUBE_MAP_NEGATIVE_Y,
+    gl.TEXTURE_CUBE_MAP_POSITIVE_Z,
+    gl.TEXTURE_CUBE_MAP_NEGATIVE_Z,
+  ];
+
+  // 加载六个面：从候选文件名里找存在的
+  let loaded = 0;
+  const viewer = document.getElementById('viewer');
+  const loadingEl = document.getElementById('loading');
+
+  function loadFace(index) {
+    const candidates = facePatterns[index];
+    let attempt = 0;
+    function tryNext() {
+      if (attempt >= candidates.length) {
+        console.error('找不到全景图:', candidates.join(' / '));
+        return;
+      }
+      const src = candidates[attempt++];
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        gl.bindTexture(gl.TEXTURE_CUBE_MAP, cubemap);
+        gl.texImage2D(targets[index], 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+        loaded++;
+        loadingEl.textContent = '加载全景图 ... ' + loaded + '/6';
+        if (loaded === 6) finish();
+      };
+      img.onerror = tryNext;  // 这张不存在，试下一个命名
+      img.src = src;
+    }
+    tryNext();
+  }
+  for (let i = 0; i < 6; i++) loadFace(i);
+
+  gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+  // ---- Shader：全屏 quad + 方向向量采样 cubemap ----
+  const vs = `
+    attribute vec2 a_pos;
+    uniform float u_zoom;
+    uniform float u_aspect;
+    varying vec3 v_dir;
+    void main(){
+      v_dir = normalize(vec3(a_pos.x * u_aspect / u_zoom, a_pos.y / u_zoom, 1.0));
+      gl_Position = vec4(a_pos, 0.0, 1.0);
+    }
+  `;
+  // fragment: 先 pitch 再 yaw，避免万向锁倾斜
+  const fs = `
+    precision mediump float;
+    varying vec3 v_dir;
+    uniform samplerCube u_cube;
+    uniform float u_lon;
+    uniform float u_lat;
+    void main(){
+      float yaw = radians(u_lon);
+      float pitch = radians(u_lat);
+      float cy = cos(yaw), sy = sin(yaw);
+      float cp = cos(pitch), sp = sin(pitch);
+      vec3 d = normalize(v_dir);
+      // 先绕 X 轴 pitch（俯仰），再绕 Y 轴 yaw（水平）
+      vec3 dx = vec3(d.x, cp*d.y - sp*d.z, sp*d.y + cp*d.z);
+      vec3 dp = vec3(cy*dx.x + sy*dx.z, dx.y, -sy*dx.x + cy*dx.z);
+      gl_FragColor = textureCube(u_cube, dp);
+    }
+  `;
+
+  function compile(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+      console.error(gl.getShaderInfoLog(s));
+      return null;
+    }
+    return s;
+  }
+  const program = gl.createProgram();
+  gl.attachShader(program, compile(gl.VERTEX_SHADER, vs));
+  gl.attachShader(program, compile(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(program);
+  gl.useProgram(program);
+
+  const aPos = gl.getAttribLocation(program, 'a_pos');
+  const uCube = gl.getUniformLocation(program, 'u_cube');
+  const uLon = gl.getUniformLocation(program, 'u_lon');
+  const uLat = gl.getUniformLocation(program, 'u_lat');
+  const uZoom = gl.getUniformLocation(program, 'u_zoom');
+  const uAspect = gl.getUniformLocation(program, 'u_aspect');
+
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+    -1,-1, 1,-1, -1,1,
+    -1,1, 1,-1, 1,1
+  ]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(aPos);
+  gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+  gl.uniform1i(uCube, 0);
+
+  // ---- 视角控制 ----
+  let lon = 0, lat = 0;
+  let zoom = 1;
+  let autoRotate = true;
+  let pinchDist = 0, pinchZoom = 1;
+
+  // ---- FPS 模式（Pointer Lock）----
+  const hint = document.getElementById('hint');
+  let fpsLocked = false;
+
+  function setFps(locked) {
+    fpsLocked = locked;
+    document.body.classList.toggle('fps', locked);
+    hint.textContent = locked ? '移动鼠标转头 · 按 ESC 退出' : '点击进入 FPS 模式';
+    if (!locked) autoRotate = true;
+  }
+
+  // 点击进入 FPS 锁定
+  viewer.addEventListener('click', () => {
+    if (document.pointerLockElement) return;
+    viewer.requestPointerLock && viewer.requestPointerLock();
+  });
+
+  // ESC / 浏览器解锁时自动退出 FPS
+  document.addEventListener('pointerlockchange', () => {
+    setFps(document.pointerLockElement === viewer);
+  });
+
+  // FPS 锁定中：鼠标位移驱动视角（无边界限制）
+  document.addEventListener('mousemove', e => {
+    if (!fpsLocked) return;
+    const dx = e.movementX || 0, dy = e.movementY || 0;
+    if (dx === 0 && dy === 0) return;
+    lon += dx * 0.3;
+    lat += dy * 0.3;
+    lat = Math.max(-85, Math.min(85, lat));
+    autoRotate = false;
+  });
+  viewer.addEventListener('wheel', e => {
+    e.preventDefault();
+    zoom *= (e.deltaY > 0 ? 0.90 : 1.12);
+    zoom = Math.max(0.2, Math.min(12, zoom));
+  }, { passive: false });
+  let touchDrag = false;
+  let lastX = 0, lastY = 0;
+  viewer.addEventListener('touchstart', e => {
+    if (e.touches.length === 1) {
+      touchDrag = true; autoRotate = false;
+      lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+    } else if (e.touches.length === 2) {
+      touchDrag = false;
+      pinchDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      pinchZoom = zoom;
+    }
+  });
+  viewer.addEventListener('touchmove', e => {
+    if (e.touches.length === 1 && touchDrag) {
+      e.preventDefault();
+      const dx = e.touches[0].clientX - lastX, dy = e.touches[0].clientY - lastY;
+      lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+      lon -= dx * 0.3; lat -= dy * 0.3;
+      lat = Math.max(-85, Math.min(85, lat));
+    } else if (e.touches.length === 2) {
+      e.preventDefault();
+      const d = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      if (pinchDist > 0) {
+        zoom = pinchZoom * (d / pinchDist);
+        zoom = Math.max(0.2, Math.min(12, zoom));
+      }
+    }
+  }, { passive: false });
+  viewer.addEventListener('touchend', () => { touchDrag = false; });
+
+  function resize() {
+    const w = window.innerWidth, h = window.innerHeight;
+    canvas.width = w; canvas.height = h;
+    gl.viewport(0, 0, w, h);
+    gl.uniform1f(uAspect, w / h);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function draw() {
+    gl.uniform1f(uLon, lon);
+    gl.uniform1f(uLat, lat);
+    gl.uniform1f(uZoom, zoom);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+  }
+
+  let ready = false;
+  function finish() {
+    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    loadingEl.classList.add('hidden');
+    setTimeout(() => loadingEl.remove(), 400);
+    ready = true;
+  }
+
+  function tick() {
+    if (ready) {
+      if (autoRotate) lon += 0.08;
+      draw();
+    }
+    requestAnimationFrame(tick);
+  }
+  tick();
+})();
+</script>
+</body>
+</html>

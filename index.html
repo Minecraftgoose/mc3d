@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Minecraft 全景</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  /* 隐藏滚动条（保持滚动功能） */
+  html, body { scrollbar-width: none; -ms-overflow-style: none; }
+  html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; width: 0; height: 0; }
+  /* 检测到鼠标（桌面/触控板）时切换为 FPS 准星光标 */
+  @media (hover: hover) and (pointer: fine) {
+    body { cursor: crosshair; }
+  }
+  body {
+    background: #0f1115;
+    color: #d6dae2;
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    padding: clamp(24px, 5vw, 48px) clamp(16px, 4vw, 24px);
+    display: flex;
+    justify-content: center;
+  }
+  .wrap { width: 100%; max-width: 640px; }
+  h1 {
+    font-size: clamp(20px, 4vw, 24px);
+    font-weight: 700;
+    color: #f2f4f8;
+    letter-spacing: 3px;
+    margin-bottom: 8px;
+  }
+  .sub {
+    font-size: 13px;
+    color: #8a91a0;
+    margin-bottom: 28px;
+  }
+  ul {
+    list-style: none;
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  @media (min-width: 640px) {
+    ul { grid-template-columns: 1fr 1fr; gap: 10px; }
+  }
+  @media (min-width: 1100px) {
+    .wrap { max-width: 960px; }
+    ul { grid-template-columns: 1fr 1fr 1fr; }
+  }
+  a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: clamp(10px, 2vw, 14px) clamp(12px, 2vw, 16px);
+    color: #b6bfd0;
+    text-decoration: none;
+    font-size: clamp(13px, 2.5vw, 15px);
+    border: 1px solid rgba(255,255,255,.09);
+    border-radius: 8px;
+    background: rgba(255,255,255,.03);
+    min-height: 44px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  a:hover { background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.18); }
+  a:active { background: rgba(255,255,255,.14); }
+  .ver {
+    color: #7c8494;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    min-width: 44px;
+  }
+  .credit {
+    margin-top: 32px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255,255,255,.08);
+    font-size: 11px;
+    line-height: 1.7;
+    color: #6b7280;
+  }
+  .credit a { display: inline; padding: 0; font-size: inherit; color: #8b93a5; border: 0; background: none; min-height: 0; text-decoration: underline; }
+  .credit a:hover { background: none; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>MINECRAFT 全景</h1>
+    <p class="sub">17 个版本 · 点击进入</p>
+    <ul>
+      <li><a href="1.0/"><span class="ver">1.0</span>冒险更新</a></li>
+      <li><a href="1.13/"><span class="ver">1.13</span>水域更新</a></li>
+      <li><a href="1.14/"><span class="ver">1.14</span>村庄与掠夺</a></li>
+      <li><a href="1.15/"><span class="ver">1.15</span>嗡嗡蜂群</a></li>
+      <li><a href="1.16/"><span class="ver">1.16</span>下界更新</a></li>
+      <li><a href="1.17/"><span class="ver">1.17</span>洞穴与山崖</a></li>
+      <li><a href="1.18/"><span class="ver">1.18</span>洞穴与山崖 II</a></li>
+      <li><a href="1.19/"><span class="ver">1.19</span>荒野更新</a></li>
+      <li><a href="1.20/"><span class="ver">1.20</span>足迹与故事</a></li>
+      <li><a href="1.21/"><span class="ver">1.21</span>棘巧试炼</a></li>
+      <li><a href="1.21.4/"><span class="ver">1.21.4</span>苍园觉醒</a></li>
+      <li><a href="1.21.5/"><span class="ver">1.21.5</span>春意盎然</a></li>
+      <li><a href="1.21.6/"><span class="ver">1.21.6</span>追逐天空</a></li>
+      <li><a href="1.21.9/"><span class="ver">1.21.9</span>铜器时代</a></li>
+      <li><a href="1.21.11/"><span class="ver">1.21.11</span>群骑纷争</a></li>
+      <li><a href="26.1/"><span class="ver">26.1</span>小鬼当家</a></li>
+      <li><a href="26.2/"><span class="ver">26.2</span>混沌立方</a></li>
+    </ul>
+    <p class="credit">
+      全景图素材来源：<a href="https://zh.minecraft.wiki/" target="_blank" rel="noopener">中文 Minecraft Wiki</a>（Minecraft Wiki），
+      按 <a href="https://creativecommons.org/licenses/by-nc-sa/3.0/" target="_blank" rel="noopener">CC BY-NC-SA 3.0</a> 许可协议使用。
+      Minecraft 及其相关商标属 Mojang AB。
+    </p>
+  </div>
+</body>
+</html>
